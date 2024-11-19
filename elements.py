@@ -1,12 +1,13 @@
 from customtkinter import *
 from PIL import Image
 from functions import *
+from tkinter import colorchooser
 from abc import abstractmethod
 
 font_size = 12
 
 class Selectable:
-    selected_object = None  # Class variable to track the currently selected object
+    selected_object = None 
 
     def __init__(self, widget, layer):
         self.widget = widget
@@ -14,60 +15,55 @@ class Selectable:
         self._drag_data = {"x": 0, "y": 0}
         self.is_selected = False
 
-        # Default unselected border color
         self.unselected_border_color = "gray"
 
-        # Bind events for selection and dragging
         self.widget.bind("<Button-1>", self.on_click)
         self.widget.bind("<B1-Motion>", self.do_drag)
         self.widget.bind("<ButtonRelease-1>", self.stop_drag)
 
-        # Bind a click event on the layer to deselect the object
         self.layer.bind("<Button-1>", self.deselect)
 
         self.widget.bind("<Delete>", self.delete_if_selected)
 
     def on_click(self, event):
-        # Select the current object
         self.select()
-        # Give focus to the widget to enable typing
         self.widget.focus_set()
-        # Start dragging
         self.start_drag(event)
-        # Stop the event from propagating to the layer
-        return "break"
+        return
 
     def select(self):
-        # Deselect any previously selected object
         if Selectable.selected_object is not None and Selectable.selected_object != self:
             Selectable.selected_object.deselect()
 
-        # Mark this object as selected
         Selectable.selected_object = self
         self.is_selected = True
         color = get_color()
         self.widget.configure(border_width = 2, border_color=color)
 
+        if isinstance(self, ImageBox):
+            self.show_resizers()
+
     def deselect(self, event=None):
-        # Deselect the current object if selected
         if self.is_selected:
             self.is_selected = False
             self.widget.configure(border_width = 0, border_color=self.unselected_border_color)
             Selectable.selected_object = None
 
+        if isinstance(self, ImageBox):
+                self.hide_resizers()
+
+        self.layer.file_parent.save_file_state()
+
     def start_drag(self, event):
-        # Record the initial click position for dragging
         self._drag_data["x"] = event.x
         self._drag_data["y"] = event.y
 
     def do_drag(self, event):
-        # Calculate the new position based on mouse movement
         dx = event.x - self._drag_data["x"]
         dy = event.y - self._drag_data["y"]
 
-        # Update the widget's position
-        x = self.widget.winfo_x() + dx
-        y = self.widget.winfo_y() + dy
+        x = (self.widget.winfo_x() + dx) * 0.8
+        y = (self.widget.winfo_y() + dy) * 0.8
         self.widget.place(x=x, y=y)
 
     def stop_drag(self, event):
@@ -83,35 +79,14 @@ class Selectable:
 
     @abstractmethod
     def to_dict(self):
-        """Serialize the current object state to a dictionary."""
-
-        return {
-            "type": self.__class__.__name__,
-            "x": self.widget.winfo_x(),
-            "y": self.widget.winfo_y(),
-            "width": self.widget.winfo_width(),
-            "height": self.widget.winfo_height(),
-            "content": self.get_content()  # Specific method to get content, if any
-        }
-
-    # def from_dict(self, data):
-    #     """Load object state from a dictionary."""
-    #     print(data)
-    #     self.widget.place(x=data["x"], y=data["y"])
-
-    #     self.set_content(data.get("content", ""))  # Specific method to set content
-
-    #     # After update, print the width and height
-    #     print(self.widget.winfo_width(), self.widget.winfo_height())
+        pass
 
     @abstractmethod
     def get_content(self):
-        """Get the content of the object. Override in subclasses if needed."""
         return None
 
     @abstractmethod
     def set_content(self, content):
-        """Set the content of the object. Override in subclasses if needed."""
         pass
 
 class Toolbar(CTkFrame):
@@ -126,69 +101,138 @@ class Toolbar(CTkFrame):
 
         tool = CTkFrame(self, width=50, height=350, corner_radius=50, fg_color="light grey")
         tool.pack(side=TOP)
+        
+        iconcursor = CTkImage(Image.open("images\\cursor.png"), size=(20, 20))
+        iconhand = CTkImage(Image.open("images\\hand.png"), size=(30, 30))
+        icontext = CTkImage(Image.open("images\\Textbox.png"), size=(20, 20))
+        iconnote = CTkImage(Image.open("images\\Note.png"), size=(30, 30))
+        iconimage = CTkImage(Image.open("images\\Image.png"), size=(20, 20))
+        iconscene = CTkImage(Image.open("images\\Scene.png"), size=(20, 20))
+        tools = []
 
-        undo_redo = CTkFrame(self, width=50, height=100, fg_color="light grey")
-        undo_redo.pack(side=BOTTOM)
+        cursor = CTkButton(tool, image=iconcursor, text=None, text_color="black", width=50, height=50,
+                                  fg_color="transparent", corner_radius=0, hover_color= "dark grey",
+                                  command=self.is_select)
+        tools.append(cursor)
+           
+        hand  = CTkButton(tool, image=iconhand, text=None, text_color="black", width=50, height=50,
+                                   fg_color="transparent", corner_radius=0, hover_color= "dark grey",
+                                   command=self.is_drag)
+        tools.append(hand)  
+  
+        Text = CTkButton(tool, image=icontext, text=None, text_color="black", width=50, height=50,
+                             fg_color="transparent", corner_radius=0, hover_color= "dark grey",
+                             command=self.add_textbox)
+        tools.append(Text) 
+   
+        note = CTkButton(tool, image=iconnote, text=None,  text_color="black", width=50, height=50,
+                                   fg_color="transparent", corner_radius=0, hover_color= "dark grey",
+                                   command=self.show_options)
+        tools.append(note)
 
-        for i in range(7):
-            if i == 4:
-                tools = CTkButton(tool, text=str(i), text_color="black", font=("Arial", 16), width=50, height=50,
+        image = CTkButton(tool, image=iconimage, text=None, text_color="black", width=50, height=50,
                                   fg_color="transparent", corner_radius=0, hover_color= "dark grey",
-                                  command=self.add_note)
-            elif i == 3:
-                tools = CTkButton(tool, text=str(i), text_color="black", font=("Arial", 16), width=50, height=50,
-                                  fg_color="transparent", corner_radius=0, hover_color= "dark grey",
-                                  command=self.add_textbox)
-            elif i == 2:
-                tools = CTkButton(tool, text=str(i), text_color="black", font=("Arial", 16), width=50, height=50,
+                                   command=self.add_image)
+        tools.append(image)
+
+        scene = CTkButton(tool, image=iconscene, text=None, text_color="black", width=50, height=50,
                                   fg_color="transparent", corner_radius=0, hover_color= "dark grey",
                                   command=self.add_scene)
-            else:
-                tools = CTkButton(tool, text=str(i), text_color="black", font=("Arial", 16), width=50, height=50,
-                                  fg_color="transparent", corner_radius=0, hover_color= "dark grey")
-            tools.pack()
+        tools.append(scene)
 
-        redo = CTkButton(undo_redo, text="->", text_color="black", font=("Arial", 16), width=50, height=50,
-                         fg_color="transparent", corner_radius=0, hover_color= "dark grey")
-        redo.pack()
+        for tool in tools:
+            tool.pack()
 
-        undo = CTkButton(undo_redo, text="<-", text_color="black", font=("Arial", 16), width=50, height=50,
-                         fg_color="transparent", corner_radius=0, hover_color= "dark grey")
-        undo.pack()
+        self.note_option = CTkFrame(self.layer, width=50, height=100, corner_radius=50, border_width=None, bg_color="transparent",
+                                fg_color="light grey")
+        
+        iconstandard = CTkImage(Image.open("images\\yellow.png"), size=(30, 30))
+        iconcolorwheel = CTkImage(Image.open("images\\colorwheel.png"), size=(30, 30))
 
-    def add_note(self):
-        """Callback to add a Note to the current layer.""" 
-        self.layer.add_element(Note(self.layer))
+        standard = CTkButton(self.note_option, image=iconstandard, text=None, text_color="black", width=50, height=50,
+                                  fg_color="transparent", corner_radius=0, hover_color= "dark grey", command=self.add_note)
+        standard.pack()
+
+        choose_color = CTkButton(self.note_option, image=iconcolorwheel, text=None, text_color="black", width=50, height=50,
+                                  fg_color="transparent", corner_radius=0, hover_color= "dark grey", command=self.choose_color)
+        choose_color.pack()
+
+    def show_options(self):
+        self.note_option.place(x=80, rely=0.55, anchor="center")
+        self.note_option.lift()
+
+    def is_drag(self):
+        self.layer.is_dragging = True
+
+    def choose_color(self):
+        color = colorchooser.askcolor(title="Select a Color")
+
+        if color:
+            rgb_color: tuple[int, int, int] = color[0]
+
+            hex_color = "#{:02x}{:02x}{:02x}".format(*map(int, rgb_color))
+
+            self.add_note(hex_color)
+
+    def is_select(self):
+        self.layer.is_dragging = False
+
+    def add_note(self, color = "#ffd60a"):      
+        self.layer.add_element(Note(self.layer, color=color))
+        self.lift()
 
     def add_textbox(self):
         self.layer.add_element(Textbox(self.layer))
+        self.lift()
 
     def add_scene(self):
         self.layer.add_element(Scene(self.layer))
+        self.lift()
+
+    def add_image(self):
+        file_path = filedialog.askopenfilename(
+            defaultextension=".ects",
+            filetypes=[
+                ("PNG files", "*.png"),
+                ("JPG files", "*.jpg"),
+            ],
+        )
+
+        if file_path:
+            self.layer.add_element(ImageBox(self.layer, file_path))
 
 
 class Note(CTkTextbox, Selectable):
-    def __init__(self, master, width=200, height=200, corner_radius=None, border_width=None, border_spacing=3,
-                 bg_color="transparent", fg_color="#ffd60a", border_color=None, text_color="black",
-                 scrollbar_button_color=None, scrollbar_button_hover_color=None, font=("Arial", font_size), activate_scrollbars=True, **kwargs):
-        CTkTextbox.__init__(self, master, width, height, corner_radius, border_width, border_spacing, bg_color, fg_color,
-                            border_color, text_color, scrollbar_button_color, scrollbar_button_hover_color, font,
-                            activate_scrollbars, **kwargs)
+    def __init__(self, master, width=200, height=200, color="#ffd60a", **kwargs):
+        self.color = color
+        CTkTextbox.__init__(self, master, width, height, fg_color=self.color, text_color="black", **kwargs)
         Selectable.__init__(self, self, master)
     
     def get_content(self):
-        return self.get("1.0", "end")  # Get the text content
+        return self.get("1.0", "end")
 
-    def set_content(self, content):
+    def set_content(self, content, color=None):
+        if color:
+            self.configure(fg_color=color)
+            self.color = color 
+        
         self.delete("1.0", "end")
         self.insert("1.0", content)
 
+    def to_dict(self):
+        return {
+            "type": self.__class__.__name__,
+            "x": self.winfo_x() * 0.8,
+            "y": self.winfo_y() * 0.8,
+            "color": self._fg_color,
+            "content": self.get_content() 
+        }
+
 class Textbox(CTkFrame, Selectable):
     def __init__(self, master, width = 262, height = 75, box_width = 200, box_height = 50, font_size = 12, **kwargs):
-        # Initialize the frame with a default width and height
         initial_width = kwargs.pop("width", width)
         initial_height = kwargs.pop("height", height)
-        self.font_size = kwargs.pop("font_size", 12)  # Keep track of the font size manually
+        self.font_size = kwargs.pop("font_size", 12)
 
         CTkFrame.__init__(self, master, width=initial_width, height=initial_height, **kwargs)
         Selectable.__init__(self, self, master)
@@ -196,16 +240,13 @@ class Textbox(CTkFrame, Selectable):
         self.configure(width = initial_width, height = initial_height)
 
         self.master = master
-        # Place the frame initially
         self.place(x=50, y=50)
 
-        # Textbox inside the resizable frame
         self.textbox = CTkTextbox(self, wrap="word", width=box_width, height=box_height, font=("Arial", self.font_size))
         self.textbox.pack(fill=BOTH, expand=True, padx=5, pady=5)
 
         self.textbox.bind("<Delete>", self.delete_if_selected)
 
-        # Resizer handles
         self.resizer_corner = CTkFrame(self, width=10, height=10, fg_color="dark grey", cursor="bottom_right_corner")
         self.resizer_corner.place(relx=1.0, rely=1.0, anchor="se")
 
@@ -222,7 +263,6 @@ class Textbox(CTkFrame, Selectable):
         self.resizer_bottom.place(relx=0.25, rely=1.0, anchor="sw", relwidth=0.5)
 
 
-        # Bind events to the resizers
         self.resizer_corner.bind("<B1-Motion>", self.resize_frame)
         self.resizer_corner.bind("<Button-1>", self.start_resizing)
 
@@ -237,21 +277,12 @@ class Textbox(CTkFrame, Selectable):
 
         self.resizer_top.bind("<B1-Motion>", self.resize_frame_height_top)
         self.resizer_top.bind("<Button-1>", self.start_resizing)
-        """
 
-        self.resizer_left.bind("<B1-Motion>", self.resize_frame_width_only)
-        self.resizer_left.bind("<Button-1>", self.start_resizing)
-
-        """
-        
-        # Variables to track initial position and size
         self.start_x = 0
         self.start_y = 0
         self.start_width = initial_width
         self.start_height = initial_height
         self.start_font_size = self.font_size 
-
-        # Resizer handles and other frame setup omitted for brevity...
 
     def delete_if_selected(self, event):
         if Selectable.selected_object == self:
@@ -261,72 +292,57 @@ class Textbox(CTkFrame, Selectable):
         self.master.file_parent.save_file_state()
 
     def start_resizing(self, event):
-        # Record the initial position and dimensions when resizing begins
         self.start_x = event.x_root
         self.start_y = event.y_root
         self.start_width = self.winfo_width()
         self.start_height = self.winfo_height()
 
     def resize_frame(self, event):
-        # Here's how this works:
-        # x -> change frame size
-        # y -> change text size
-        # Calculate new dimensions based on mouse movement (corner resize)
         dx = event.x_root - self.start_x
         dy = event.y_root - self.start_y
 
-        new_width = max(self.start_width + dx, 50)  # Minimum width set to 50
-        new_height = max(self.start_height + dy, 50)  # Minimum height set to 50
+        new_width = max(self.start_width + dx, 50)
+        new_height = max(self.start_height + dy, 50)
 
-        # Resize the frame and the textbox
         self.configure(width=new_width, height=new_height)
         self.textbox.configure(width=new_width, height=new_height)
 
-        # Adjust font size based on height change (proportional resizing)
         self.font_size = max(new_height / self.start_height * self.start_font_size, 12)
         self.textbox.configure(font=("Arial", self.font_size))
 
     def resize_frame_width_right(self, event):
-        # Resize only the width of the frame
         dx = event.x_root - self.start_x
-        new_width = max(self.start_width + dx, 50)  # Minimum width set to 50
+        new_width = max(self.start_width + dx, 50) 
 
-        # Adjust width
         self.configure(width=new_width)
         self.textbox.configure(width=new_width)
     
     def resize_frame_width_left(self, event):
-        # Resize only the width of the frame
         dx = event.x_root - self.start_x
-        new_width = max(self.start_width - dx, 50)  # Minimum width set to 50
+        new_width = max(self.start_width - dx, 50)
     
-        # Adjust width
         self.configure(width=new_width)
         print(event.x_root - self.master.winfo_rootx())
         self.textbox.configure(width=new_width)
         self.place(x=event.x_root - self.master.winfo_rootx(), y=self.winfo_y())
 
     def resize_frame_height_bottom(self, event):
-        # Resize only the height of the frame
         dy = event.y_root - self.start_y
-        new_height = max(self.start_height + dy, 50)  # Minimum width set to 50
+        new_height = max(self.start_height + dy, 50)
 
-        # Adjust height
         self.configure(height=new_height)
         self.textbox.configure(height=new_height)
     
     def resize_frame_height_top(self, event):
-         # Resize only the height of the frame
         dy = event.y_root - self.start_y
-        new_height = max(self.start_height - dy, 50)  # Minimum width set to 50
+        new_height = max(self.start_height - dy, 50)
 
-        # Adjust height
         self.configure(height=new_height)
         self.textbox.configure(height=new_height)
         self.place(y=event.y_root - self.master.winfo_rooty(), x=self.winfo_x())
 
     def get_content(self):
-        return self.textbox.get("1.0", "end")  # Get the text content
+        return self.textbox.get("1.0", "end")
 
     def set_content(self, content):
         self.textbox.delete("1.0", "end")
@@ -335,12 +351,12 @@ class Textbox(CTkFrame, Selectable):
     def to_dict(self):
         return {
             "type": self.__class__.__name__,
-            "x": self.widget.winfo_x(),
-            "y": self.widget.winfo_y(),
+            "x": self.widget.winfo_x() * 0.8,
+            "y": self.widget.winfo_y() * 0.8,
             "width": self.widget.winfo_width(),
             "height": self.widget.winfo_height(),
-            "box_width": self.textbox.winfo_width() * 0.77,
-            "box_height": self.textbox.winfo_height() * 0.77,
+            "box_width": self.textbox.winfo_width() * 0.8,
+            "box_height": self.textbox.winfo_height() * 0.8,
             "font_size": self.font_size,
             "content": self.get_content()  
         }
@@ -359,12 +375,14 @@ class SettingsWindow:
         self.dark_mode_switch = CTkSwitch(self.settings_frame, text="Light Mode", command=self.toggle_dark_mode)
         self.dark_mode_switch.pack()
 
-        save_button = CTkButton(self.settings_frame, text="Save", font=("Arial", 16), command=self.save_settings)
+        save_button = CTkButton(self.settings_frame, text="Save", font=("Arial", 16), fg_color="black", 
+                                hover_color="gray",command=self.save_settings)
         save_button.pack()
 
-        help_button = CTkButton(self.settings_frame, text="Help", font=("Arial", 16), command=self.open_help)
-        help_button.pack()
-
+        help_button = CTkButton(self.settings_frame, text="Help", font=("Arial", 16), fg_color="black", 
+                                hover="gray", command=self.open_help)
+        help_button.pack()             
+    
     def toggle_dark_mode(self):
         if self.dark_mode_switch.get():
             set_appearance_mode("light")
@@ -378,19 +396,217 @@ class SettingsWindow:
         help_window = CTkToplevel(self.top)
         help_window.title("Help")
         help_window.geometry("400x200")
-        help_label = CTkLabel(help_window, text="Here is some help information!")
-        help_label.pack(pady=20)
+        help_label = CTkLabel(help_window, text="To delete press the detele button \nTo delete image double-right-click  \n To Save press ctrl + S \n")
+        help_label.pack()
+
+
+class ImageBox(CTkFrame, Selectable):
+    def __init__(self, master, image_path, width = 262, height = 75, box_width = 200, box_height = 50, image: Image = None, **kwargs):
+        self.path = image_path
+        self.pil_img = Image.open(image_path)
+
+        self.img_ratio = self.pil_img.width / self.pil_img.height
+
+        fixed_dims = self.fix_ratio(width, height, self.img_ratio, True)
+        width = fixed_dims[0]
+        height = fixed_dims[1]
+
+        self.img = CTkImage(
+            light_image=self.pil_img,
+            dark_image=self.pil_img,
+            size=(width, height)
+        )
+
+        initial_width = kwargs.pop("width", width)
+        initial_height = kwargs.pop("height", height)
+
+        CTkFrame.__init__(self, master, width=initial_width, height=initial_height, fg_color="transparent", **kwargs)
+        Selectable.__init__(self, self, master)
+
+        self.configure(width = initial_width, height = initial_height)
+
+        self.place(x=50, y=50)
+
+        self.label = CTkLabel(self, width=box_width, height=box_height, image=self.img, text="")
+        self.label.pack(fill=BOTH, expand=True, padx=5, pady=5)
+
+        self.resizer_corner_se = CTkFrame(self, width=10, height=10, fg_color="dark grey", cursor="bottom_right_corner")
+        self.resizer_corner_se.place(relx=1.0, rely=1.0, anchor="se")
+
+        self.resizer_right = CTkFrame(self, width=5, height=initial_height, fg_color="grey", cursor="sb_h_double_arrow")
+
+        self.resizer_bottom = CTkFrame(self, height=5, width=initial_height, fg_color="grey", cursor="sb_v_double_arrow")
+
+        self.resizer_corner_se.bind("<B1-Motion>", self.resize_frame_se)
+        self.resizer_corner_se.bind("<Button-1>", self.start_resizing)
+
+        self.resizer_right.bind("<B1-Motion>", self.resize_frame_width_right)
+        self.resizer_right.bind("<Button-1>", self.start_resizing)
+
+        self.resizer_bottom.bind("<B1-Motion>", self.resize_frame_height_bottom)
+        self.resizer_bottom.bind( self.start_resizing)
+
+        self.start_x = 0
+        self.start_y = 0
+        self.start_width = initial_width
+        self.start_height = initial_height
+
+        self.label.bind("<Double-Button-3>", self.delete_if_selected)
+
+    def delete_if_selected(self, event):
+        if Selectable.selected_object == self:
+            self.deselect()
+            self.destroy()
+
+        self.master.file_parent.save_file_state()
+
+    def show_resizers(self):
+        self.resizer_right.place(relx=1.0, rely=0.25, anchor="ne", relheight=0.5)
+        self.resizer_bottom.place(relx=0.25, rely=1.0, anchor="sw", relwidth=0.5)
+
+    def hide_resizers(self):
+        self.resizer_right.place_forget()
+        self.resizer_bottom.place_forget()
+
+    def fix_ratio(self, in_width, in_height, ratio, increasing: bool):
+        if not (bool((in_width) > (in_height * ratio)) ^ bool(increasing)):
+            return (in_width, int(in_width / ratio))
+        else:
+            return (in_height * ratio, in_height)
+
+    def delete_if_selected(self, event):
+        if Selectable.selected_object == self:
+            self.deselect()
+            self.destroy()
+
+        self.master.file_parent.save_file_state()
+
+    def start_resizing(self, event):
+        self.start_x = event.x_root
+        self.start_y = event.y_root
+        self.start_width = self.winfo_width()
+        self.start_height = self.winfo_height()
+    
+
+    def resize_frame_se(self, event):
+        dx = event.x_root - self.start_x
+        dy = event.y_root - self.start_y
+
+        new_width = max(self.start_width + dx, 50)
+        new_height = max(self.start_height + dy, 50)
+
+        fixed_dims = self.fix_ratio(new_width, new_height, self.img_ratio, True)
+
+        self.img = CTkImage(
+            light_image=self.pil_img,
+            dark_image=self.pil_img,
+            size=fixed_dims
+        )
+
+        new_width = fixed_dims[0]
+        new_height = fixed_dims[1]
+
+ 
+        self.configure(width=new_width, height=new_height)
+        self.label.configure(image=self.img)
+        self.label.configure(width=new_width, height=new_height)
+
+    def resize_frame_width_right(self, event):
+        dx = event.x_root - self.start_x
+        new_width = max(self.start_width + dx, 50) 
+        fixed_dims = self.fix_ratio(new_width, self.start_height, self.img_ratio, new_width>self.start_width)
+
+        self.img = CTkImage(
+            light_image=self.pil_img,
+            dark_image=self.pil_img,
+            size=fixed_dims
+        )
+
+        new_width = fixed_dims[0]
+        new_height = fixed_dims[1]
+
+        self.configure(width=new_width, height=new_height)
+        self.label.configure(image=self.img)
+        self.label.configure(width=new_width, height=new_height)
+
+
+    def resize_frame_height_bottom(self, event):
+        dy = event.y_root - self.start_y
+        new_height = max(self.start_height + dy, 50)
+
+        fixed_dims = self.fix_ratio(self.start_width, new_height, self.img_ratio, new_height>self.start_height)
+
+        self.img = CTkImage(
+            light_image=self.pil_img,
+            dark_image=self.pil_img,
+            size=fixed_dims
+        )
+
+        new_width = fixed_dims[0]
+        new_height = fixed_dims[1]
+
+        self.configure(width=new_width, height=new_height)
+        self.label.configure(image=self.img)
+        self.label.configure(width=new_width, height=new_height)
+
+    def get_content(self):
+        pass
+
+    def set_content(self, content):
+        pass
+
+    def to_dict(self):
+        return {
+            "type": self.__class__.__name__,
+            "x": self.widget.winfo_x() * 0.8,
+            "y": self.widget.winfo_y() * 0.8,
+            "width": self.widget.winfo_width(),
+            "height": self.widget.winfo_height(),
+            "box_width": self.label.winfo_width() * 0.8,
+            "image_path": self.path,
+        }
+
 
 class Scene(CTkFrame, Selectable):
-    def __init__(self, master, width = 200, height = 150, corner_radius = None, border_width = None, bg_color = "transparent", fg_color = "#252525", border_color = None, background_corner_colors = None, overwrite_preferred_drawing_method = None, **kwargs):
+    def __init__(self, master, name = "Scene", width = 250, height = 200, corner_radius = None, border_width = None, bg_color = "transparent", fg_color = "#252525", border_color = None, background_corner_colors = None, overwrite_preferred_drawing_method = None, **kwargs):
         CTkFrame.__init__(self, master, width, height, corner_radius, border_width, bg_color, fg_color, border_color,       
                           background_corner_colors, overwrite_preferred_drawing_method, **kwargs)
         Selectable.__init__(self, self, master)
 
-        truncated_name = truncate_name("Scene 1")
-        self.title_button = CTkButton(self, text=truncated_name, text_color="white", font=("Arial", 16), anchor= "sw",
-                                    fg_color="transparent", hover_color="dark grey")
-        self.title_button.pack(side=TOP, padx=5)
+        self.name = name
+
+        self.title = CTkTextbox(self, font = ("Arial", 16), height= 30, text_color="white", fg_color="transparent", 
+                                activate_scrollbars= False)
+        self.title.insert("1.0", name)
+        self.title.pack(side=TOP, fill = X, padx=5)
 
         self.textbox = CTkTextbox(self, wrap="word", font=("Arial", font_size), height= 120, corner_radius=0)
         self.textbox.pack(side = TOP, fill = BOTH)
+
+        self.textbox.bind("<Delete>", self.delete_if_selected)
+
+    def get_content(self):
+        return self.textbox.get("1.0", "end")
+
+    def set_content(self, content, name=None):
+        if name:
+            self.title.delete("1.0", "end")
+            self.title.insert("1.0", name)
+        self.textbox.delete("1.0", "end")
+        self.textbox.insert("1.0", content)
+
+    def delete_if_selected(self, event):
+        if Selectable.selected_object == self:
+            self.deselect()
+            self.destroy()
+
+        self.master.file_parent.save_file_state()
+
+    def to_dict(self):
+        return {
+            "type": self.__class__.__name__,
+            "name": self.title.get("1.0", "end"),
+            "x": self.winfo_x() * 0.8,
+            "y": self.winfo_y() * 0.8,
+            "content": self.get_content(),
+        }
